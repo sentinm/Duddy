@@ -1,0 +1,6 @@
+{
+  "name": "Duddy",
+  "description": "A fast, expressive Material 3 file download application with live progress tracking and intelligent link handling.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
