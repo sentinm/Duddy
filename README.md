@@ -80,14 +80,26 @@ Duddy is crafted following the latest **Material Design 3 Expressive guidelines*
 
 Duddy follows **Clean Architecture** and modern Android **MVVM** principles:
 
-```mermaid
-graph TD
-    A[UI Layer: Jetpack Compose M3] -->|Observes StateFlow| B[DownloadViewModel]
-    B -->|Commands & Lifecycle| C[FileDownloader]
-    B -->|Persists History| D[DownloadRepository]
-    C -->|HTTP Streaming & Redirect Resolution| E[OkHttp 4 Engine]
-    C -->|Validates URLs & Formats| F[UrlValidator & FileHelpers]
-    D -->|Internal JSON Storage| G[Local App Storage]
+```text
+┌──────────────────────────────────────────────────────────────────────────┐
+│                      UI Layer (Jetpack Compose M3)                       │
+│    • DuddyTopBar  • UrlInputSection  • FileNameBadge  • TrackerCard       │
+└────────────────────────────────────┬─────────────────────────────────────┘
+                                     │ User Actions / Observes StateFlow
+                                     ▼
+┌──────────────────────────────────────────────────────────────────────────┐
+│                   Presentation (DownloadViewModel)                       │
+│       Manages reactive StateFlows, job lifecycle, and URL triage         │
+└──────────────────┬─────────────────────────────────────┬─────────────────┘
+                   │                                     │
+          Download │ Execution                  Save /   │ Load History
+                   ▼                                     ▼
+┌──────────────────────────────────────┐  ┌────────────────────────────────┐
+│      Network (FileDownloader)        │  │     DownloadRepository         │
+│  • OkHttp 4 Stream & Buffer          │  │  • App Internal Storage        │
+│  • Short-Link Redirect Unwrapper     │  │  • Completed Downloads DB      │
+│  • Live Speed & ETA Rolling Flow     │  │  • File Cleanup & Sharing      │
+└──────────────────────────────────────┘  └────────────────────────────────┘
 ```
 
 ### Technology Highlights
