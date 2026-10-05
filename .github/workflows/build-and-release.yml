@@ -39,14 +39,17 @@ jobs:
           fetch-depth: 0
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
           java-version: '17'
-          cache: 'gradle'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Accept Android SDK Licenses & Prepare SDK
+        run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
 
       - name: Determine Version Tag
         id: versioning
@@ -62,7 +65,7 @@ jobs:
             fi
           fi
           echo "TAG_NAME=$TAG_NAME" >> $GITHUB_ENV
-          echo "Release tag: $TAG_NAME"
+          echo "Determined release tag: $TAG_NAME"
 
       - name: Restore or Generate Debug Keystore
         run: |
@@ -77,11 +80,11 @@ jobs:
               -dname "CN=Android Debug,O=Android,C=US"
           fi
 
-      - name: Grant Execute Permission to Gradlew
+      - name: Ensure Gradlew Executable
         run: chmod +x gradlew
 
       - name: Build APK with Gradle
-        run: ./gradlew assembleDebug --stacktrace
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Locate and Package App APK
         run: |
@@ -92,7 +95,6 @@ jobs:
           fi
           echo "Found APK at: $APK_SOURCE"
           
-          # Rename with the app name and version tag
           OUTPUT_APK_NAME="Duddy-${{ env.TAG_NAME }}.apk"
           cp "$APK_SOURCE" "$OUTPUT_APK_NAME"
           echo "Packaged APK as: $OUTPUT_APK_NAME"
@@ -106,28 +108,46 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Prepare Release Notes & Changelog
-        id: notes
+      - name: Create GitHub Release and Attach APK
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           CUSTOM_NOTES="${{ github.event.inputs.custom_notes }}"
           if [ -n "$CUSTOM_NOTES" ]; then
-            BODY="### 🚀 What's New in Duddy ${{ env.TAG_NAME }}\n\n$CUSTOM_NOTES\n\n---\n*Built with Material 3 Expressive and Kotlin.*"
-          else
-            BODY="### 🚀 Duddy ${{ env.TAG_NAME }}\n\nFast, simple file download manager built with Material 3 Expressive design principles.\n\n- Real-time download progress tracking with live speed and ETA\n- File name badge on top of progress bar\n- Link-only input with enhanced short-link resolution and error handling\n- Direct stream without pause/resume overhead\n\n---\n*See below for full commit changelog and download the APK.*"
-          fi
-          echo "RELEASE_BODY<<EOF" >> $GITHUB_ENV
-          echo -e "$BODY" >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
+            cat <<EOF > release_notes.md
+          ### 🚀 What's New in Duddy ${{ env.TAG_NAME }}
 
-      - name: Create GitHub Release and Attach APK
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.TAG_NAME }}
-          name: Duddy ${{ env.TAG_NAME }}
-          body: ${{ env.RELEASE_BODY }}
-          draft: ${{ github.event.inputs.is_draft }}
-          prerelease: ${{ github.event.inputs.is_prerelease }}
-          generate_release_notes: true
-          files: ${{ env.OUTPUT_APK_NAME }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          $CUSTOM_NOTES
+
+          ---
+          *Built with Material 3 Expressive and Kotlin.*
+          EOF
+          else
+            cat <<EOF > release_notes.md
+          ### 🚀 Duddy ${{ env.TAG_NAME }}
+
+          Fast, simple file download manager built with Material 3 Expressive design principles.
+
+          - Real-time download progress tracking with live speed and ETA
+          - File name badge displayed on top of the progress bar
+          - Link-only input with enhanced short-link resolution and error diagnostics
+          - Continuous direct stream with no pause/resume overhead
+
+          ---
+          *See below for full commit changelog and download the APK.*
+          EOF
+          fi
+
+          EXTRA_FLAGS=""
+          if [ "${{ github.event.inputs.is_draft }}" = "true" ]; then
+            EXTRA_FLAGS="$EXTRA_FLAGS --draft"
+          fi
+          if [ "${{ github.event.inputs.is_prerelease }}" = "true" ]; then
+            EXTRA_FLAGS="$EXTRA_FLAGS --prerelease"
+          fi
+
+          gh release create "${{ env.TAG_NAME }}" "${{ env.OUTPUT_APK_NAME }}" \
+            --title "Duddy ${{ env.TAG_NAME }}" \
+            --notes-file release_notes.md \
+            --generate-notes \
+            $EXTRA_FLAGS
